@@ -15,11 +15,15 @@ return new class extends Migration
             $table->id();
             $table->string('title');
             $table->string('description')->nullable();
+            $table->string('tags')->nullable();
+            $table->timestamp('date_start')->nullable();
             $table->timestamp('date_end')->nullable();
             $table->unsignedBigInteger('project_id');
+            $table->unsignedBigInteger('user_id')->nullable();
             $table->timestamps();
 
             $table->foreign('project_id')->references('id')->on('projects');
+            $table->foreign('user_id')->references('id')->on('users');
         });
     }
 
