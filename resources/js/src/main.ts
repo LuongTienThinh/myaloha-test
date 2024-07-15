@@ -52,4 +52,8 @@ app.component('Popper', Popper);
 import vue3JsonExcel from 'vue3-json-excel';
 app.use(vue3JsonExcel);
 
+// axios
+import axios from '@/axios';
+app.config.globalProperties.$axios = axios;
+
 app.mount('#app');
