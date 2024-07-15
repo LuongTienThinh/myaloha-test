@@ -78,11 +78,13 @@
 
                             <!-- task list -->
                             <draggable
+                                v-model="project.tasks"
                                 class="connect-sorting-content min-h-[150px]"
                                 group="default"
                                 ghost-class="sortable-ghost"
                                 drag-class="sortable-drag"
                                 :animation="200"
+                                @change="onDraggableChange(project.id, $event)"
                             >
                                 <div class="sortable-list" v-for="task in project.tasks" :key="project.id + '' + task.id">
                                     <div class="shadow bg-[#f4f4f4] dark:bg-white-dark/20 p-3 pb-5 rounded-md mb-5 space-y-3 cursor-move">
@@ -166,6 +168,7 @@
                                                 </div>
                                             </template>
                                         </div>
+                                        <div class="font-bold" v-if="task.user_id">Asignee: {{ task.user_name }}</div>
                                         <div class="flex items-center justify-between">
                                             <div class="font-medium flex items-center hover:text-primary">
                                                 <svg
@@ -185,7 +188,7 @@
                                                     <path opacity="0.5" d="M17 4V2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
                                                     <path opacity="0.5" d="M2 9H22" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
                                                 </svg>
-                                                <span>{{ task.date }}</span>
+                                                <span :class="classExpireTime(task.date_end)">{{ formatDatetime(task.date_end) }}</span>
                                             </div>
                                             <div class="flex items-center">
                                                 <button type="button" class="hover:text-info" @click="addEditTask(project.id, task)">
@@ -433,6 +436,48 @@
                                                     placeholder="Enter Description"
                                                 ></textarea>
                                             </div>
+                                            <div>
+                                                <label for="assignee">Assignee</label>
+                                                <div class="relative w-full flex">
+                                                    <input 
+                                                        type="text"
+                                                        v-model="paramsTask.user_name"
+                                                        placeholder="Assign for" 
+                                                        class="form-input rounded-none bg-white  dark:shadow-[#1b2e4b] placeholder:tracking-wider focus:outline-none py-2"
+                                                        @focus="isShowListUser = true"
+                                                        @blur="handleBlur()"
+                                                    />
+                                                    <div v-if="isShowListUser" class="absolute top-[calc(100%+1px)] left-0 w-full border-[1px] bg-white p-2 shadow-sm overflow-y-scroll max-h-48">
+                                                        <ul class="space-y-1">
+                                                            <li v-for="user in userList" :key="user.id" class="px-2 py-1 cursor-pointer hover:bg-cyan-500 hover:text-white" @click="handleAssignForUser(user)">
+                                                                {{ user.name }}
+                                                            </li>
+                                                        </ul>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label for="dateStart">Date Start</label>
+                                                <input
+                                                    id="dateStart"
+                                                    v-model="paramsTask.date_start"
+                                                    type="datetime-local"
+                                                    class="form-input"
+                                                    placeholder="Event Start Date"
+                                                />
+                                                <div class="text-danger mt-2" id="startDateErr"></div>
+                                            </div>
+                                            <div>
+                                                <label for="dateEnd">Date End</label>
+                                                <input
+                                                    id="dateEnd"
+                                                    v-model="paramsTask.date_end"
+                                                    type="datetime-local"
+                                                    class="form-input"
+                                                    placeholder="Event End Date"
+                                                />
+                                                <div class="text-danger mt-2" id="endDateErr"></div>
+                                            </div>
                                         </div>
 
                                         <div class="flex justify-end items-center mt-8">
@@ -536,12 +581,13 @@
     </div>
 </template>
 <script lang="ts" setup>
-    import { ref } from 'vue';
+    import { onMounted, ref } from 'vue';
     import { TransitionRoot, TransitionChild, Dialog, DialogPanel, DialogOverlay } from '@headlessui/vue';
     import { VueDraggableNext as draggable } from 'vue-draggable-next';
     import Swal from 'sweetalert2';
     import { useAppStore } from '@/stores/index';
     import { useMeta } from '@/composables/use-meta';
+    import axios from 'axios';
     useMeta({ title: 'Scrumboard' });
     const store = useAppStore();
     const params = ref({
@@ -549,79 +595,98 @@
         title: '',
     });
     const paramsTask = ref({
-        projectId: null,
+        project_id: null,
+        user_id: null,
+        user_name: '',
         id: null,
         title: '',
         description: '',
         tags: '',
+        date_start: null,
+        date_end: null,
     });
     const selectedTask: any = ref(null);
     const isAddProjectModal = ref(false);
     const isAddTaskModal = ref(false);
     const isDeleteModal = ref(false);
-    const projectList: any = ref([
-        {
-            id: 1,
-            title: 'In Progress',
-            tasks: [
-                {
-                    projectId: 1,
-                    id: 1,
-                    title: 'Creating a new Portfolio on Dribble',
-                    description: 'Lorem ipsum dolor sit amet, consectetur adipisicing elit.',
-                    image: true,
-                    date: ' 08 Aug, 2020',
-                    tags: ['designing'],
-                },
-                {
-                    projectId: 1,
-                    id: 2,
-                    title: 'Singapore Team Meet',
-                    description: 'Lorem ipsum dolor sit amet, consectetur adipisicing elit.',
-                    date: ' 09 Aug, 2020',
-                    tags: ['meeting'],
-                },
-            ],
-        },
-        {
-            id: 2,
-            title: 'Pending',
-            tasks: [
-                {
-                    projectId: 2,
-                    id: 1,
-                    title: 'Plan a trip to another country',
-                    description: '',
-                    date: ' 10 Sep, 2020',
-                },
-            ],
-        },
-        {
-            id: 3,
-            title: 'Complete',
-            tasks: [
-                {
-                    projectId: 3,
-                    id: 1,
-                    title: 'Dinner with Kelly Young',
-                    description: '',
-                    date: ' 08 Aug, 2020',
-                },
-                {
-                    projectId: 3,
-                    id: 2,
-                    title: 'Launch New SEO Wordpress Theme ',
-                    description: 'Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
-                    date: ' 09 Aug, 2020',
-                },
-            ],
-        },
-        {
-            id: 4,
-            title: 'Working',
-            tasks: [],
-        },
-    ]);
+    const projectList: any = ref([]);
+    const userList: any = ref([]);
+    const isShowListUser = ref(false);
+
+    const getProjectList = async () => {
+        try {
+            const projects: any = await axios.get(`http://127.0.0.1:8000/api/scrumboard/project/list`);
+            projectList.value = [...projects?.data?.data];
+            projectList.value = projectList.value.map(project => {
+                return {
+                    ...project,
+                    tasks: project.tasks?.map(task => {
+                        return {
+                            project_id: project.id,
+                            user_id: task.user_id,
+                            user_name: userList?.value?.find((user: any) => user.id == task.user_id)?.name,
+                            id: task.id,
+                            title: task.title,
+                            description: task.description,
+                            date_start: task.date_start,
+                            date_end: task.date_end,
+                            tags: task.tags?.length > 0 ? task.tags.split(',') : [],
+                        }
+                    })
+                }
+            });
+        } catch (error) {
+            if (axios.isAxiosError(error)) {
+                return error?.response?.data;
+            }
+            console.log('An error occurred:', error);
+        }
+    }
+
+    const getUserList = async () => {
+        try {
+            const users: any = await axios.get(`http://127.0.0.1:8000/api/list-user`);
+            userList.value = [...users?.data?.data];
+            userList.value = userList.value.map(user => ({
+                id: user.id,
+                name: user.name,
+                email: user.email,
+            }));
+        } catch (error) {
+            if (axios.isAxiosError(error)) {
+                return error?.response?.data;
+            }
+            console.log('An error occurred:', error);
+        }
+    }
+
+    onMounted(async () => {
+        await getUserList();
+        await getProjectList();
+        console.log(projectList.value);
+    });
+
+    const onDraggableChange = async (projectId, event: any) => {
+        if (event.added) {
+            const dragedItem = { ...event.added.element };
+
+            if (dragedItem.project_id != projectId) {
+                dragedItem.project_id = projectId;
+                dragedItem.tags = dragedItem.tags.join(', ');
+
+                try {
+                    console.log('ondrag');
+                    await axios.put(`http://127.0.0.1:8000/api/scrumboard/task/update/${dragedItem.id}`, dragedItem);
+                } catch (error) {
+                    if (axios.isAxiosError(error)) {
+                        return error?.response?.data;
+                    }
+    
+                    console.log('An error occurred:', error);
+                }
+            }
+        }
+    }
 
     const addEditProject = (project: any = null) => {
         setTimeout(() => {
@@ -637,7 +702,7 @@
         });
     };
 
-    const saveProject = () => {
+    const saveProject = async () => {
         if (!params.value.title) {
             showMessage('Title is required.', 'error');
             return false;
@@ -645,88 +710,142 @@
 
         if (params.value.id) {
             //update project
-            const project = projectList.value.find((d: any) => d.id === params.value.id);
-            project.title = params.value.title;
+            const project = {
+                id: params.value.id,
+                title: params.value.title,
+            };
+
+            try {
+                await axios.put(`http://127.0.0.1:8000/api/scrumboard/project/update/${project.id}`, project);
+
+                await getProjectList();
+            } catch (error) {
+                if (axios.isAxiosError(error)) {
+                    return error?.response?.data;
+                }
+
+                console.log('An error occurred:', error);
+            }
         } else {
             //add project
-            const lastId = projectList.value.length
-                ? projectList.value.reduce((max: number, obj: any) => (obj.id > max ? obj.id : max), projectList.value[0].id)
-                : 0;
-
             const project = {
-                id: lastId + 1,
                 title: params.value.title,
-                tasks: [],
-            };
-            projectList.value.push(project);
+            }
+
+            try {
+                await axios.post('http://127.0.0.1:8000/api/scrumboard/project/create', project);
+
+                await getProjectList();
+            } catch (error) {
+                if (axios.isAxiosError(error)) {
+                    return error?.response?.data;
+                }
+
+                console.log('An error occurred:', error);
+            }
         }
 
         showMessage('Project has been saved successfully.');
         isAddProjectModal.value = false;
     };
 
-    const deleteProject = (project: any) => {
-        projectList.value = projectList.value.filter((d: any) => d.id != project.id);
-        showMessage('Project has been deleted successfully.');
+    const deleteProject = async (project: any) => {
+        try {
+            const response = await axios.delete(`http://127.0.0.1:8000/api/scrumboard/project/delete/${project.id}`);
+
+            if (response.status === 200) {
+                showMessage('Project has been deleted successfully.');
+    
+                await getProjectList();
+            }
+        } catch (error) {
+            if (axios.isAxiosError(error)) {
+                return error?.response?.data;
+            }
+
+            console.log('An error occurred:', error);
+        }
     };
 
-    const clearProjects = (project: any) => {
-        project.tasks = [];
+    const clearProjects = async (project: any) => {
+        try {
+            await axios.delete(`http://127.0.0.1:8000/api/scrumboard/task/project-${project.id}/clear-all`);
+
+            await getProjectList();
+        } catch (error) {
+            if (axios.isAxiosError(error)) {
+                return error?.response?.data;
+            }
+
+            console.log('An error occurred:', error);
+        }
     };
 
     // task
     const addEditTask = (projectId: any, task: any = null) => {
         paramsTask.value = {
-            projectId: null,
+            project_id: null,
+            user_id: null,
+            user_name: '',
             id: null,
             title: '',
             description: '',
             tags: '',
+            date_start: null,
+            date_end: null,
         };
         if (task) {
             paramsTask.value = JSON.parse(JSON.stringify(task));
             paramsTask.value.tags = paramsTask.value.tags ? paramsTask.value.tags.toString() : '';
         }
-        paramsTask.value.projectId = projectId;
+        paramsTask.value.project_id = projectId;
         isAddTaskModal.value = true;
     };
 
-    const saveTask = () => {
+    const saveTask = async () => {
         if (!paramsTask.value.title) {
             showMessage('Title is required.', 'error');
             return false;
         }
 
-        const project = projectList.value.find((d: any) => d.id === paramsTask.value.projectId);
+        if (paramsTask.value.date_start && paramsTask.value.date_end) {
+            const dateStartObj = new Date(paramsTask.value.date_start);
+            const dateEndObj = new Date(paramsTask.value.date_end);
+
+            if (dateStartObj > dateEndObj) {
+                showMessage('Date end must be later than date start.', 'error');
+                return false;
+            }
+        }
+
         if (paramsTask.value.id) {
             //update task
-            const task = project.tasks.find((d: any) => d.id === paramsTask.value.id);
-            task.title = paramsTask.value.title;
-            task.description = paramsTask.value.description;
-            task.tags = paramsTask.value.tags?.length > 0 ? paramsTask.value.tags.split(',') : [];
+            const { user_name, ...task} = paramsTask.value;
+            try {
+                await axios.put(`http://127.0.0.1:8000/api/scrumboard/task/update/${task.id}`, task);
+
+                await getProjectList();
+            } catch (error) {
+                if (axios.isAxiosError(error)) {
+                    return error?.response?.data;
+                }
+
+                console.log('An error occurred:', error);
+            }
         } else {
             //add task
-            let maxid = 0;
-            if (project.tasks?.length) {
-                maxid = project.tasks.reduce((max: number, obj: any) => (obj.id > max ? obj.id : max), project.tasks[0].id);
+            const { user_name, ...task} = paramsTask.value;
+            try {
+                await axios.post('http://127.0.0.1:8000/api/scrumboard/task/create', paramsTask.value);
+
+                await getProjectList();
+            } catch (error) {
+                if (axios.isAxiosError(error)) {
+                    return error?.response?.data;
+                }
+
+                console.log('An error occurred:', error);
             }
-
-            const today = new Date();
-            const dd = String(today.getDate()).padStart(2, '0');
-            const mm = String(today.getMonth()); //January is 0!
-            const yyyy = today.getFullYear();
-            const monthNames: any = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-            const task = {
-                projectId: paramsTask.value.projectId,
-                id: maxid + 1,
-                title: paramsTask.value.title,
-                description: paramsTask.value.description,
-                date: dd + ' ' + monthNames[mm] + ', ' + yyyy,
-                tags: paramsTask.value.tags?.length > 0 ? paramsTask.value.tags.split(',') : [],
-            };
-
-            project.tasks.push(task);
         }
 
         showMessage('Task has been saved successfully.');
@@ -740,13 +859,58 @@
         }, 10);
     };
 
-    const deleteTask = () => {
-        let project = projectList.value.find((d: any) => d.id === selectedTask.value.projectId);
-        project.tasks = project.tasks.filter((d: any) => d.id != selectedTask.value.id);
+    const deleteTask = async () => {
+        try {
+            const response = await axios.delete(`http://127.0.0.1:8000/api/scrumboard/task/delete/${selectedTask.value.id}`);
 
-        showMessage('Task has been deleted successfully.');
-        isDeleteModal.value = false;
+            if (response.status === 200) {
+                showMessage('Task has been deleted successfully.');
+                isDeleteModal.value = false;
+    
+                await getProjectList();
+            }
+        } catch (error) {
+            if (axios.isAxiosError(error)) {
+                return error?.response?.data;
+            }
+
+            console.log('An error occurred:', error);
+        }
     };
+
+    const classExpireTime = (dateEnd: any) => {
+        const currDateObj = Date.now();
+        const dateEndObj = new Date(dateEnd);
+
+        return currDateObj < dateEndObj.getTime() ? 'text-success' : 'text-danger';
+    }
+
+    const handleBlur = () => {
+        setTimeout(() => {
+            isShowListUser.value = false;
+        }, 200);
+    }
+
+    const handleAssignForUser = (user: any) => {
+        paramsTask.value.user_id = user.id;
+        paramsTask.value.user_name = user.name;
+    }
+
+    const formatDatetime = (date: any) => {
+        if (date) {
+            const dateObj = new Date(date);
+            const dd = String(dateObj.getDate()).padStart(2, '0');
+            const mm = String(dateObj.getMonth()) //January is 0!
+            const yyyy = dateObj.getFullYear();
+            const hh = String(dateObj.getHours()).padStart(2, '0');
+            const ii = String(dateObj.getMinutes()).padStart(2, '0');
+            const monthNames: any = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+            return `${hh}:${ii} - ${dd} ${monthNames[mm]}, ${yyyy}`;
+        }
+
+        return '';
+    }
 
     const showMessage = (msg = '', type = 'success') => {
         const toast: any = Swal.mixin({
